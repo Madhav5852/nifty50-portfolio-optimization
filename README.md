@@ -1,41 +1,45 @@
 # Nifty50 Portfolio Optimization (Markowitz Mean-Variance)
 
 A from-scratch implementation of mean-variance portfolio optimization on 12
-liquid Nifty50 stocks: minimum-variance portfolio, max-Sharpe (tangency)
-portfolio, the full efficient frontier, and a **rolling, multi-window
-backtest** against an equal-weight benchmark.
+liquid Nifty50 stocks. It builds the minimum-variance portfolio, the
+max-Sharpe (tangency) portfolio, the full efficient frontier, and then
+tests all of it with a rolling, multi-window backtest against a simple
+equal-weight benchmark.
 
 ![Efficient Frontier](outputs/efficient_frontier.png)
 
 ## What this project does
 
-1. Pulls 6 years (2019–2024) of daily prices for 12 Nifty50 stocks across
-   sectors (banking, IT, FMCG, energy, telecom, auto).
-2. Estimates expected returns (μ) and the covariance matrix (Σ) from
-   historical daily log returns, annualized.
+1. Pulls 6 years (2019 to 2024) of daily prices for 12 Nifty50 stocks
+   across sectors: banking, IT, FMCG, energy, telecom, auto.
+2. Estimates expected returns (mu) and the covariance matrix (sigma) from
+   historical daily log returns, then annualizes both.
 3. Solves three portfolio optimizations, all under a no-short-selling
-   constraint (weights ≥ 0, sum to 1):
-   - **Minimum-variance portfolio** — least possible risk, ignoring returns entirely
-   - **Max-Sharpe (tangency) portfolio** — best risk-adjusted return
-   - **Efficient frontier** — the full risk/return tradeoff curve
-4. Runs a **rolling, expanding-window backtest**: estimates μ and Σ using
-   only data available up to a point in time, locks in the resulting
-   weights, tests on the following year, then repeats — expanding the
-   training window each time — across four separate windows
-   (train 2019–2020 → test 2021, ..., train 2019–2023 → test 2024).
-5. Compares all three portfolios against a naive equal-weight benchmark,
-   both per-window and averaged across all windows.
+   constraint (weights have to be zero or positive and sum to 1):
+   - **Minimum-variance portfolio**: the least risky combination possible, it doesn't even look at expected returns
+   - **Max-Sharpe (tangency) portfolio**: the best risk-adjusted return
+   - **Efficient frontier**: the full risk/return tradeoff curve
+4. Runs a rolling, expanding-window backtest. Each round, it estimates mu
+   and sigma using only the data available up to that point, locks in the
+   resulting weights, and tests them on the following year. Then it
+   repeats, expanding the training window each time, across four separate
+   windows (train 2019-2020, test 2021; all the way up to train
+   2019-2023, test 2024).
+5. Compares all three portfolios against equal-weight, both per window
+   and averaged across all of them.
 
 ## Key result
 
-A single train/test split can be misleading — this project deliberately
-checked that, and the check mattered.
+A single train/test split can be misleading. I checked that on purpose,
+and it turned out to matter a lot.
 
-**One 70/30 split** (train on the first 70% of 2019–2024, test on the
-rest) showed Max-Sharpe winning decisively: realized Sharpe 1.72 vs.
-1.37 (Equal-Weight) and 1.06 (Min-Variance).
+The first version of this project used one 70/30 split (train on the
+first 70% of the data, test on the rest), and Max-Sharpe won convincingly
+there: realized Sharpe of 1.72 against 1.37 for Equal-Weight and 1.06 for
+Min-Variance. That looked like a clean result.
 
-**The rolling backtest across four windows told a different story:**
+Then I ran the same idea across four separate windows instead of just
+one, and got a very different picture:
 
 | Portfolio | Mean realized Sharpe | Std dev across windows |
 |---|---|---|
@@ -43,28 +47,29 @@ rest) showed Max-Sharpe winning decisively: realized Sharpe 1.72 vs.
 | Min-Variance | 0.95 | 0.61 |
 | Max-Sharpe | 1.03 | **1.06** |
 
-Max-Sharpe does **not** win on average. Its single-split result (1.72)
-turned out to be the best of its four windows, not a representative one
-— per-window, Max-Sharpe's realized Sharpe ranged from **1.98** (2021
-test) down to **-0.43** (2022 test, an actual risk-adjusted loss), back
-up to **1.58** (2024 test). Its standard deviation across windows is
-roughly double that of the other two portfolios.
+Max-Sharpe doesn't win on average. The 1.72 result from the single split
+was actually its best window out of four, not a typical one. Its
+realized Sharpe per window ranged from 1.98 (2021) down to -0.43 (2022,
+an actual loss on a risk-adjusted basis), then back up to 1.58 (2024).
+Its standard deviation across windows is roughly double the other two
+portfolios'.
 
-**The honest conclusion**: mean-variance optimization's concentrated bets
-(Max-Sharpe put 37%+ weight in single names depending on the window) can
-produce standout results in some years and losses in others. Equal-Weight
-— the "naive" benchmark — was the most consistent performer across all
-four windows tested, which is exactly the estimation-error problem this
-project set out to investigate, now demonstrated with real evidence
-across multiple windows rather than a single lucky split.
+So the honest takeaway: mean-variance optimization's concentrated bets
+(Max-Sharpe put over a third of its weight into single stocks depending
+on the window) can look great in some years and lose money in others.
+Equal-weight, which doesn't optimize anything, was the steadiest
+performer across every window I tested. That's basically the whole point
+of this project: showing, with real numbers instead of just theory, why
+you can't fully trust an optimizer that's been fit to noisy historical
+averages.
 
 ## Repo structure
 
 ```
 src/
   fetch_data.py       - pulls prices via yfinance (12 Nifty50 tickers, 2019-2024)
-  portfolio.py         - returns/mu/sigma estimation + all three optimizations
-  backtest.py           - single-split backtest + rolling/expanding-window backtest
+  portfolio.py         - returns/mu/sigma estimation, plus all three optimizations
+  backtest.py           - single-split backtest and rolling/expanding-window backtest
 notebooks/
   plot_frontier.py         - generates the efficient frontier chart
   run_real_backtest.py     - runs the single 70/30 split backtest
@@ -91,24 +96,16 @@ python run_rolling_backtest.py
 
 ## Known simplifications
 
-- Assumes returns are normally distributed (mean/variance only — ignores
-  skew and fat tails)
-- Uses historical mean return as the return forecast — a well-documented
-  weak predictor, which is exactly why the backtest step exists
-- No transaction costs or rebalancing within any test window (buy-and-hold
-  on the window's starting weights)
-- Raw sample covariance matrix, no shrinkage (Ledoit-Wolf) applied
-- Only four rolling windows (limited by having 6 years of data with a
-  2-year minimum training period) — more years of data would allow more
-  windows and a more statistically confident average
-- Risk-free rate uses a single current snapshot (6.76%) rather than the
-  period-appropriate historical average, which moved over 2019–2024
+- Assumes returns are normally distributed (mean and variance only, ignores skew and fat tails)
+- Uses the historical mean return as the return forecast, which is a well-known weak predictor. That's basically why the backtest step exists in the first place.
+- No transaction costs and no rebalancing within a test window (it just buys and holds the starting weights)
+- Uses the raw sample covariance matrix, no shrinkage (like Ledoit-Wolf) applied
+- Only four rolling windows, limited by having 6 years of data and needing at least 2 years to train on. More years of data would mean more windows and a more confident average.
+- The risk-free rate uses a single current snapshot (6.76%) instead of the rate that actually prevailed during each test period, which moved around over 2019-2024
 
 ## Possible next steps
 
-- Ledoit-Wolf shrinkage on the covariance matrix, to test whether it
-  reduces Max-Sharpe's window-to-window volatility
-- Compare against the actual Nifty50 index (`^NSEI`) as a fourth benchmark
-- Expand from 12 to a fuller Nifty50 basket
-- More granular rolling windows (quarterly rather than yearly) if a
-  longer price history becomes available
+- Try Ledoit-Wolf shrinkage on the covariance matrix and see if it reduces Max-Sharpe's window-to-window swings
+- Add the actual Nifty50 index (^NSEI) as a fourth benchmark to compare against
+- Expand from 12 stocks to a fuller Nifty50 basket
+- Use more granular rolling windows (quarterly instead of yearly) if a longer price history becomes available
