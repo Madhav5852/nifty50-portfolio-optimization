@@ -1,11 +1,3 @@
-"""
-Step 5 & 6: Train/test split and benchmarking.
-
-This is the "honesty check" step: estimate mu and sigma ONLY on the
-training window, lock in the resulting weights, then see how those
-fixed weights actually perform on a test window the optimizer never saw.
-"""
-
 import numpy as np
 import pandas as pd
 from portfolio import (
@@ -16,17 +8,13 @@ from portfolio import (
 
 
 def train_test_split_prices(prices: pd.DataFrame, train_frac: float = 0.7):
-    """Chronological split -- never shuffle time series data."""
+    
     split_idx = int(len(prices) * train_frac)
     return prices.iloc[:split_idx], prices.iloc[split_idx:]
 
 
 def realized_performance(weights: pd.Series, test_returns: pd.DataFrame, annualize: bool = True):
-    """
-    Given fixed weights (chosen using only training data) and the ACTUAL
-    returns that happened in the test window, compute what really happened
-    -- not what the optimizer predicted would happen.
-    """
+    
     # daily portfolio return series over the test window
     port_daily = test_returns @ weights
     realized_mean = port_daily.mean()
@@ -46,15 +34,7 @@ def realized_performance(weights: pd.Series, test_returns: pd.DataFrame, annuali
 
 
 def run_backtest(prices: pd.DataFrame, train_frac: float = 0.7, risk_free_rate: float = 0.065):
-    """
-    Full walk-forward test:
-      1. Split prices chronologically into train/test.
-      2. Estimate mu, sigma on TRAIN only.
-      3. Solve min-variance, max-Sharpe, and equal-weight portfolios using
-         only that training information.
-      4. Apply those FIXED weights to the TEST window's actual returns.
-      5. Return a comparison table.
-    """
+    
     train_prices, test_prices = train_test_split_prices(prices, train_frac)
 
     train_returns = compute_returns(train_prices, log_returns=True)
