@@ -33,7 +33,7 @@ def realized_performance(weights: pd.Series, test_returns: pd.DataFrame, annuali
     }
 
 
-def run_backtest(prices: pd.DataFrame, train_frac: float = 0.7, risk_free_rate: float = 0.065):
+def run_backtest(prices: pd.DataFrame, train_frac: float = 0.7, risk_free_rate: float = 0.0676):
     
     train_prices, test_prices = train_test_split_prices(prices, train_frac)
 

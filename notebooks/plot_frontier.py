@@ -9,7 +9,7 @@ from portfolio import (
     portfolio_return, portfolio_volatility
 )
 
-RISK_FREE_RATE = 0.065
+RISK_FREE_RATE = 0.0676
 
 
 def main():
