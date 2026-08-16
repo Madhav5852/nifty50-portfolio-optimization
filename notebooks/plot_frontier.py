@@ -9,7 +9,7 @@ from portfolio import (
     portfolio_return, portfolio_volatility
 )
 
-RISK_FREE_RATE = 0.065  # placeholder -- replace with the actual rate for your period
+RISK_FREE_RATE = 0.065
 
 
 def main():
