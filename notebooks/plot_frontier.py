@@ -1,3 +1,18 @@
+"""
+Step 7: Visualization.
+
+Draws the efficient frontier, marks the three key portfolios
+(min-variance, max-Sharpe, equal-weight), plots individual stocks
+for comparison, and draws the Capital Market Line through the
+max-Sharpe (tangency) portfolio.
+
+Usage:
+    cd notebooks
+    python plot_frontier.py
+
+Reads prices from ../data/nifty_prices.csv (run fetch_data.py first).
+"""
+
 import sys
 sys.path.append('../src')
 import numpy as np
@@ -9,7 +24,7 @@ from portfolio import (
     portfolio_return, portfolio_volatility
 )
 
-RISK_FREE_RATE = 0.0676
+RISK_FREE_RATE = 0.0676  # placeholder -- replace with the actual rate for your period
 
 
 def main():
