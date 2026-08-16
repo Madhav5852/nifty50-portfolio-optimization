@@ -1,11 +1,3 @@
-"""
-Step 5 & 6: Train/test split and benchmarking.
-
-This is the "honesty check" step: estimate mu and sigma ONLY on the
-training window, lock in the resulting weights, then see how those
-fixed weights actually perform on a test window the optimizer never saw.
-"""
-
 import numpy as np
 import pandas as pd
 from portfolio import (
@@ -16,17 +8,13 @@ from portfolio import (
 
 
 def train_test_split_prices(prices: pd.DataFrame, train_frac: float = 0.7):
-    """Chronological split -- never shuffle time series data."""
+    
     split_idx = int(len(prices) * train_frac)
     return prices.iloc[:split_idx], prices.iloc[split_idx:]
 
 
 def realized_performance(weights: pd.Series, test_returns: pd.DataFrame, annualize: bool = True):
-    """
-    Given fixed weights (chosen using only training data) and the ACTUAL
-    returns that happened in the test window, compute what really happened
-    -- not what the optimizer predicted would happen.
-    """
+    
     # daily portfolio return series over the test window
     port_daily = test_returns @ weights
     realized_mean = port_daily.mean()
@@ -45,16 +33,8 @@ def realized_performance(weights: pd.Series, test_returns: pd.DataFrame, annuali
     }
 
 
-def run_backtest(prices: pd.DataFrame, train_frac: float = 0.7, risk_free_rate: float = 0.065):
-    """
-    Full walk-forward test:
-      1. Split prices chronologically into train/test.
-      2. Estimate mu, sigma on TRAIN only.
-      3. Solve min-variance, max-Sharpe, and equal-weight portfolios using
-         only that training information.
-      4. Apply those FIXED weights to the TEST window's actual returns.
-      5. Return a comparison table.
-    """
+def run_backtest(prices: pd.DataFrame, train_frac: float = 0.7, risk_free_rate: float = 0.0676):
+    
     train_prices, test_prices = train_test_split_prices(prices, train_frac)
 
     train_returns = compute_returns(train_prices, log_returns=True)
@@ -86,3 +66,67 @@ def run_backtest(prices: pd.DataFrame, train_frac: float = 0.7, risk_free_rate: 
         }
 
     return pd.DataFrame(results).T, w_minvar, w_sharpe, w_eq
+
+
+def expanding_window_splits(prices: pd.DataFrame, min_train_years: int = 2, test_years: int = 1):
+    
+    years = sorted(prices.index.year.unique())
+    windows = []
+
+    for i in range(min_train_years, len(years) - test_years + 1):
+        train_years = years[:i]
+        test_year_list = years[i:i + test_years]
+
+        train_prices = prices[prices.index.year.isin(train_years)]
+        test_prices = prices[prices.index.year.isin(test_year_list)]
+
+        train_label = f"{train_years[0]}-{train_years[-1]}"
+        test_label = f"{test_year_list[0]}" if len(test_year_list) == 1 else f"{test_year_list[0]}-{test_year_list[-1]}"
+
+        windows.append((train_prices, test_prices, train_label, test_label))
+
+    return windows
+
+
+def rolling_backtest(prices: pd.DataFrame, min_train_years: int = 2,
+                      test_years: int = 1, risk_free_rate: float = 0.0676):
+    
+    windows = expanding_window_splits(prices, min_train_years, test_years)
+
+    per_window_rows = []
+
+    for train_prices, test_prices, train_label, test_label in windows:
+        train_returns = compute_returns(train_prices, log_returns=True)
+        test_returns = compute_returns(test_prices, log_returns=True)
+
+        if len(train_returns) < 30 or len(test_returns) < 5:
+            # Not enough data in this window to estimate/test meaningfully -- skip it
+            continue
+
+        mu_train, sigma_train = compute_mu_sigma(train_returns, annualize=True)
+
+        w_minvar = min_variance_portfolio(sigma_train)
+        w_sharpe = max_sharpe_portfolio(mu_train, sigma_train, risk_free_rate)
+        w_eq = equal_weight_portfolio(prices.columns)
+
+        for name, w in [
+            ("Min-Variance", w_minvar),
+            ("Max-Sharpe", w_sharpe),
+            ("Equal-Weight", w_eq),
+        ]:
+            realized = realized_performance(w, test_returns)
+            per_window_rows.append({
+                "train_window": train_label,
+                "test_window": test_label,
+                "portfolio": name,
+                **realized,
+            })
+
+    per_window = pd.DataFrame(per_window_rows)
+
+    summary = (
+        per_window.groupby("portfolio")[["annualized_return", "annualized_volatility", "sharpe"]]
+        .agg(["mean", "std"])
+    )
+
+    return per_window, summary
